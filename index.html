@@ -971,12 +971,15 @@ function exportCSV() {
     g.amount || 0,
     g.notes  || '',
   ]);
-  // sep=; подсказывает Excel использовать точку с запятой — иначе всё в одну ячейку
-  const sep = 'sep=;\n';
   const csv = [headers,...rows]
-    .map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';'))
+    .map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join('\t'))
     .join('\n');
-  download('\uFEFF' + sep + csv, 'гости_ужин.csv', 'text/csv;charset=utf-8;');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/plain;charset=utf-16le;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'гости_ужин.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 // JSON — полный бэкап всех данных, включая корзину
