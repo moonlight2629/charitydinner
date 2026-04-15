@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Благотворительный ужин — Гости</title>
+
+  <!--
+    Шрифты через jsdelivr (работает в России без VPN).
+    Cormorant — для заголовков, Jost — для интерфейса.
+  -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant@5/500.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jost@5/400.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jost@5/500.css" />
+
+  <!-- Firebase SDK — gstatic.com работает в России без VPN -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <style>
+    /* ============================================================
+       ЦВЕТА — всё управление в одном месте
+    ============================================================ */
+    :root {
+      --bg:          #F2F4F6;
+      --surface:     #FFFFFF;
+      --border:      #D4DCE8;
+      --text:        #1A2535;
+      --muted:       #5E6E82;
+      --accent:      #1B3A5C;
+      --accent-soft: #E6EEF7;
+      --green:       #1E6B45;
+      --green-soft:  #DFF0E9;
+      --blue:        #4A90C4;
+      --blue-soft:   #E3F0FA;
+      --red:         #8E2E2E;
+      --red-soft:    #F5E0E0;
+      --amber:       #7A5C1E;
+      --amber-soft:  #F5EDD8;
+      --radius:      10px;
+      --shadow:      0 1px 5px rgba(27,58,92,.09);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: 'Jost', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* ============================================================
+       ШАПКА
+    ============================================================ */
+    header {
+      background: #1B3A5C;
+      border-bottom: none;
+      padding: 22px 28px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .title-block h1 {
+      font-family: 'Cormorant', Georgia, serif;
+      font-size: 1.9rem;
+      font-weight: 500;
+      color: #FFFFFF;
+      line-height: 1.1;
+    }
+    .title-block p {
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.6);
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #6DD4A0;
+      flex-shrink: 0;
+      animation: pulse 2.5s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    /* Кнопки в шапке — светлые на тёмном фоне */
+    header .btn-outline {
+      border-color: rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.85);
+    }
+    header .btn-outline:hover {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      border-color: rgba(255,255,255,0.5);
+    }
+    header .btn-primary {
+      background: #4A90C4;
+      color: #fff;
+    }
+    header .btn-primary:hover { background: #3a7aaa; }
+
+    /* ============================================================
+       КОНТЕЙНЕР
+    ============================================================ */
+    main { max-width: 1140px; margin: 0 auto; padding: 24px 20px 0; }
+
+    /* ============================================================
+       СТАТИСТИКА
+    ============================================================ */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      box-shadow: var(--shadow);
+    }
+    .stat-card .lbl {
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .stat-card .val {
+      font-family: 'Cormorant', Georgia, serif;
+      font-size: 1.9rem;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .stat-card .sub { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+
+    /* ============================================================
+       ФОРМА ДОБАВЛЕНИЯ
+    ============================================================ */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px 20px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow);
+    }
+    .form-card h2 {
+      font-family: 'Cormorant', Georgia, serif;
+      font-size: 1.15rem;
+      font-weight: 500;
+      margin-bottom: 14px;
+    }
+    .fg { display:grid; gap:10px; margin-bottom:10px; }
+    .fg-3 { grid-template-columns: 2fr 1fr 1fr; }
+    .fg-3b { grid-template-columns: 1fr 1fr 1fr; }
+    .fg-1 { grid-template-columns: 1fr; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group label {
+      font-size: .68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+    }
+    input[type="text"], input[type="number"], select, input[type="email"] {
+      width: 100%;
+      padding: 8px 11px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-family: inherit;
+      font-size: .88rem;
+      color: var(--text);
+      background: var(--bg);
+      transition: border-color .15s, box-shadow .15s;
+      -webkit-appearance: none;
+    }
+    input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+    input.err { border-color: var(--red); }
+
+    /* ============================================================
+       КНОПКИ
+    ============================================================ */
+    .btn {
+      display:inline-flex; align-items:center; gap:5px;
+      padding: 8px 18px;
+      border-radius: 7px;
+      font-family: inherit;
+      font-size: .86rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+      border: none;
+      white-space: nowrap;
+    }
+    .btn-primary  { background:var(--accent); color:#fff; }
+    .btn-primary:hover  { background:#6a4e34; }
+    .btn-primary:disabled { opacity:.4; cursor:not-allowed; }
+    .btn-outline  { background:transparent; border:1px solid var(--border); color:var(--muted); }
+    .btn-outline:hover  { background:var(--bg); color:var(--text); }
+    .btn-danger   { background:transparent; border:1px solid var(--red-soft); color:var(--red); }
+    .btn-danger:hover   { background:var(--red-soft); }
+    .btn-sm { padding:5px 12px; font-size:.8rem; }
+    .btn-icon {
+      background:transparent; border:none; cursor:pointer;
+      color:var(--muted); font-size:.95rem; padding:3px 6px;
+      border-radius:5px; transition:all .15s; line-height:1;
+    }
+    .btn-icon:hover { background:var(--accent-soft); color:var(--accent); }
+    .btn-icon.del:hover { background:var(--red-soft); color:var(--red); }
+    .btn-icon.restore:hover { background:var(--green-soft); color:var(--green); }
+
+    .form-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
+    .form-err { font-size:.78rem; color:var(--red); margin-bottom:6px; }
+
+    /* ============================================================
+       ТУЛБАР
+    ============================================================ */
+    .toolbar {
+      display:flex; align-items:center; gap:8px;
+      margin-bottom:12px; flex-wrap:wrap;
+    }
+    .search-wrap { position:relative; flex:1; min-width:150px; max-width:220px; }
+    .search-wrap input { padding-left:30px; background:var(--surface); }
+    .search-icon {
+      position:absolute; left:9px; top:50%;
+      transform:translateY(-50%);
+      color:var(--muted); font-size:13px; pointer-events:none;
+    }
+    .ftabs { display:flex; gap:5px; flex-wrap:wrap; }
+    .ftab {
+      padding:4px 11px; border-radius:20px;
+      border:1px solid var(--border); background:var(--surface);
+      font-size:.76rem; font-family:inherit; color:var(--muted);
+      cursor:pointer; transition:all .15s;
+    }
+    .ftab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .ftab:hover:not(.active) { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+
+    /* ============================================================
+       ТАБЛИЦА
+    ============================================================ */
+    .table-card {
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    thead tr { border-bottom:1px solid var(--border); background:var(--bg); }
+    th {
+      padding:10px 12px; text-align:left;
+      font-size:.66rem; font-weight:500; text-transform:uppercase;
+      letter-spacing:.08em; color:var(--muted); white-space:nowrap;
+    }
+    td { padding:11px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:#FDFCFA; }
+    /* строка в режиме редактирования */
+    tbody tr.editing td { background:#FFFDF9; }
+
+    .avatar {
+      width:28px; height:28px; border-radius:50%;
+      background:var(--accent-soft); color:var(--accent);
+      font-size:.7rem; font-weight:500;
+      display:inline-flex; align-items:center; justify-content:center;
+      flex-shrink:0;
+    }
+    .name-cell { display:flex; align-items:center; gap:8px; }
+
+    /* Бейджи — статус приглашения */
+    .badge {
+      display:inline-block; font-size:.7rem; font-weight:500;
+      padding:2px 8px; border-radius:20px; white-space:nowrap;
+    }
+    .b-potential { background:var(--amber-soft); color:var(--amber); }
+    .b-promised  { background:var(--blue-soft);  color:var(--blue);  }
+    .b-confirmed { background:var(--green-soft); color:var(--green); }
+    .b-declined  { background:var(--red-soft);   color:var(--red);   }
+
+    /* Бейджи — принадлежность */
+    .b-graduate { background:#EDE9F8; color:#5B3FA6; }
+    .b-parent   { background:#E0F2F2; color:#1F6B6B; }
+    .b-par-grad { background:#F5EDD8; color:#7A5C1E; }
+    .b-friend   { background:#E3EFE7; color:#3A6B4A; }
+    .b-cold     { background:#F0EDEA; color:#78716C; }
+    .b-other    { background:#F0E8DF; color:#7C5C3E; }
+
+    /* select в ячейке статуса */
+    .inline-sel {
+      border:none; background:transparent;
+      font-family:inherit; font-size:.76rem; font-weight:500;
+      cursor:pointer; padding:2px 4px; border-radius:20px;
+      max-width:140px;
+    }
+    .inline-sel:focus { outline:1px solid var(--accent); }
+
+    /* инпуты редактирования внутри ячеек */
+    .edit-input {
+      width:100%; padding:5px 8px;
+      border:1px solid var(--border); border-radius:6px;
+      font-family:inherit; font-size:.82rem;
+      background:var(--surface); color:var(--text);
+      min-width:80px;
+    }
+    .edit-input:focus { outline:none; border-color:var(--accent); }
+    .edit-actions { display:flex; gap:4px; align-items:center; }
+
+    .amount-val { font-weight:500; color:var(--green); }
+    .muted-val  { color:var(--muted); }
+
+    .empty { text-align:center; padding:48px 20px; color:var(--muted); }
+    .empty .big { font-family:'Cormorant',Georgia,serif; font-size:1.7rem; color:var(--accent); margin-bottom:8px; }
+    .empty p { font-size:.86rem; }
+
+    .table-footer {
+      padding:9px 12px;
+      border-top:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:.76rem; color:var(--muted);
+      flex-wrap:wrap; gap:6px;
+      background:var(--bg);
+    }
+
+    /* ============================================================
+       КОРЗИНА — модальное окно
+    ============================================================ */
+    .modal-overlay {
+      display:none;
+      position:fixed; inset:0;
+      background:rgba(28,25,23,.45);
+      z-index:100;
+      align-items:center; justify-content:center;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--surface);
+      border-radius:var(--radius);
+      box-shadow:0 8px 32px rgba(0,0,0,.18);
+      width:min(680px, 95vw);
+      max-height:80vh;
+      display:flex; flex-direction:column;
+      overflow:hidden;
+    }
+    .modal-head {
+      padding:16px 20px;
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .modal-head h3 {
+      font-family:'Cormorant',Georgia,serif;
+      font-size:1.15rem; font-weight:500;
+    }
+    .modal-body { overflow-y:auto; padding:16px 20px; flex:1; }
+    .modal-foot {
+      padding:12px 20px;
+      border-top:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:center;
+      gap:10px; flex-wrap:wrap;
+    }
+    .trash-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 0; border-bottom:1px solid var(--border);
+      gap:12px;
+    }
+    .trash-row:last-child { border-bottom:none; }
+    .trash-name { font-weight:500; font-size:.88rem; }
+    .trash-meta { font-size:.76rem; color:var(--muted); margin-top:2px; }
+    .trash-actions { display:flex; gap:6px; flex-shrink:0; }
+    .trash-empty { text-align:center; padding:28px; color:var(--muted); font-size:.86rem; }
+
+    /* ============================================================
+       ТОСТ
+    ============================================================ */
+    #toast {
+      position:fixed; bottom:24px; left:50%;
+      transform:translateX(-50%) translateY(16px);
+      background:var(--text); color:#fff;
+      padding:9px 20px; border-radius:30px;
+      font-size:.82rem; opacity:0; pointer-events:none;
+      transition:all .28s; z-index:200; white-space:nowrap;
+    }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ============================================================
+       АДАПТИВ
+    ============================================================ */
+    @media (max-width:680px) {
+      header { padding:16px 14px; }
+      main { padding:16px 12px 0; }
+      .fg-3, .fg-3b { grid-template-columns:1fr; }
+      .hide-mob { display:none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ШАПКА -->
+<header>
+  <div class="title-block">
+    <h1>Благотворительный ужин</h1>
+    <p>
+      <span class="live-dot"></span>
+      <span id="status-text">Подключение...</span>
+    </p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-outline btn-sm" onclick="openTrash()">🗑 Корзина <span id="trash-count"></span></button>
+    <button class="btn btn-outline btn-sm" onclick="exportJSON()">↓ JSON</button>
+    <button class="btn btn-outline btn-sm" onclick="exportCSV()">↓ CSV</button>
+    <button class="btn btn-primary btn-sm" onclick="toggleForm()">+ Добавить</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- СТАТИСТИКА -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="lbl">Всего гостей</div>
+      <div class="val" id="s-total">—</div>
+      <div class="sub" id="s-conf-cnt">подтверждено: —</div>
+    </div>
+    <div class="stat-card">
+      <div class="lbl">Потенциальная сумма</div>
+      <div class="val" id="s-total-amt">—</div>
+      <div class="sub">всех взносов</div>
+    </div>
+    <div class="stat-card">
+      <div class="lbl">Подтверждено</div>
+      <div class="val" id="s-conf-amt" style="color:var(--green)">—</div>
+      <div class="sub">уже точно</div>
+    </div>
+    <div class="stat-card">
+      <div class="lbl">Обещаны</div>
+      <div class="val" id="s-promised" style="color:var(--blue)">—</div>
+      <div class="sub">ожидаем ответ</div>
+    </div>
+  </div>
+
+  <!-- ФОРМА ДОБАВЛЕНИЯ -->
+  <div class="form-card" id="form-card" style="display:none">
+    <h2>Новый гость</h2>
+
+    <div class="fg fg-3">
+      <div class="form-group">
+        <label for="f-name">Имя / Фамилия *</label>
+        <input id="f-name" type="text" placeholder="Иванов Иван" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="f-category">Принадлежность</label>
+        <select id="f-category">
+          <option value="">— не указана —</option>
+          <option value="graduate">Выпускник</option>
+          <option value="parent">Родитель</option>
+          <option value="par-grad">Родитель выпускника</option>
+          <option value="friend">Друг лицея</option>
+          <option value="cold">Холодный контакт</option>
+          <option value="other">Другое</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="f-status">Статус</label>
+        <select id="f-status">
+          <option value="potential">Потенциальный</option>
+          <option value="promised">Обещан</option>
+          <option value="confirmed">Подтверждён</option>
+          <option value="declined">Отказался</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="fg fg-3b">
+      <div class="form-group">
+        <label for="f-contact">Контакт</label>
+        <input id="f-contact" type="text" placeholder="+7 900 000 00 00" />
+      </div>
+      <div class="form-group">
+        <!-- datalist — можно выбрать из списка ИЛИ вписать своё -->
+        <label for="f-resp">Ответственный</label>
+        <input id="f-resp" type="text" list="resp-opts" placeholder="БХ, ШМ, БГ или своё..." autocomplete="off" />
+        <datalist id="resp-opts">
+          <option value="БХ">
+          <option value="ШМ">
+          <option value="БГ">
+        </datalist>
+      </div>
+      <div class="form-group">
+        <label for="f-amount">Сумма взноса, ₽</label>
+        <input id="f-amount" type="number" placeholder="0" min="0" step="1000" />
+      </div>
+    </div>
+
+    <div class="fg fg-1" style="margin-bottom:14px">
+      <div class="form-group">
+        <label for="f-notes">Заметки</label>
+        <input id="f-notes" type="text" placeholder="Должность, откуда знаем, примечания..." />
+      </div>
+    </div>
+
+    <div class="form-err" id="form-err" style="display:none"></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="addGuest()" id="add-btn">Добавить</button>
+      <button class="btn btn-outline" onclick="toggleForm()">Отмена</button>
+      <span style="font-size:.74rem;color:var(--muted)">или Enter</span>
+    </div>
+  </div>
+
+  <!-- ТУЛБАР -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="search" placeholder="Поиск..." oninput="renderTable()" />
+    </div>
+    <div class="ftabs">
+      <button class="ftab active" onclick="setFilter('all',this)">Все</button>
+      <button class="ftab" onclick="setFilter('potential',this)">Потенциальные</button>
+      <button class="ftab" onclick="setFilter('promised',this)">Обещаны</button>
+      <button class="ftab" onclick="setFilter('confirmed',this)">Подтверждены</button>
+      <button class="ftab" onclick="setFilter('declined',this)">Отказались</button>
+    </div>
+  </div>
+
+  <!-- ТАБЛИЦА -->
+  <div class="table-card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:22%">Имя</th>
+            <th style="width:14%">Статус</th>
+            <th style="width:14%" class="hide-mob">Принадлежность</th>
+            <th style="width:10%" class="hide-mob">Взнос</th>
+            <th style="width:11%" class="hide-mob">Ответственный</th>
+            <th style="width:11%" class="hide-mob">Контакт</th>
+            <th style="width:15%" class="hide-mob">Заметки</th>
+            <th style="width:3%"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" class="empty"><p>Загрузка...</p></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer" id="table-footer" style="display:none">
+      <span id="footer-count"></span>
+      <span id="footer-sum"></span>
+    </div>
+  </div>
+
+</main>
+
+<!-- КОРЗИНА -->
+<div class="modal-overlay" id="trash-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>🗑 Корзина</h3>
+      <button class="btn-icon" onclick="closeTrash()" style="font-size:1.1rem">✕</button>
+    </div>
+    <div class="modal-body" id="trash-body"></div>
+    <div class="modal-foot">
+      <span style="font-size:.78rem;color:var(--muted)">Удалённые записи хранятся здесь. Можно восстановить.</span>
+      <button class="btn btn-danger btn-sm" onclick="emptyTrash()" id="empty-trash-btn">Очистить корзину</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ==============================================================
+   НАСТРОЙКИ FIREBASE — вставь свои данные из консоли Firebase
+   (подробная инструкция ниже в чате)
+============================================================== */
+const firebaseConfig = {
+  apiKey:            'AIzaSyA2hxEP8p3RGqECDvNeU_eWhzbSFu9N5KU',
+  authDomain:        'charity-dinner.firebaseapp.com',
+  databaseURL:       'https://charity-dinner-default-rtdb.europe-west1.firebasedatabase.app',   // важно! начинается с https://
+  projectId:         'charity-dinner',
+  storageBucket:     'harity-dinner.firebasestorage.app',
+  messagingSenderId: '178326249628',
+  appId:             '1:178326249628:web:bbf9b55c16e577cf700d59',
+};
+
+firebase.initializeApp(firebaseConfig);
+const db        = firebase.database();
+const guestsRef = db.ref('guests'); // все данные хранятся по этому пути
+
+let guests     = [];
+let deleted    = [];
+let activeFilter = 'all';
+let editingId    = null;
+
+/* ==============================================================
+   СПРАВОЧНИКИ
+============================================================== */
+const STATUSES = {
+  potential: { l:'Потенциальный', cls:'b-potential' },
+  promised:  { l:'Обещан',        cls:'b-promised'  },
+  confirmed: { l:'Подтверждён',   cls:'b-confirmed' },
+  declined:  { l:'Отказался',     cls:'b-declined'  },
+};
+const CATEGORIES = {
+  'graduate': { l:'Выпускник',           cls:'b-graduate' },
+  'parent':   { l:'Родитель',            cls:'b-parent'   },
+  'par-grad': { l:'Родитель выпускника', cls:'b-par-grad' },
+  'friend':   { l:'Друг лицея',          cls:'b-friend'   },
+  'cold':     { l:'Холодный контакт',    cls:'b-cold'     },
+  'other':    { l:'Другое',              cls:'b-other'    },
+};
+
+/* ==============================================================
+   ИНИЦИАЛИЗАЦИЯ — подписка на реальное время
+   Firebase onValue срабатывает при любом изменении данных —
+   все пользователи видят обновления мгновенно
+============================================================== */
+function init() {
+  guestsRef.on('value', (snapshot) => {
+    const data = snapshot.val() || {};
+
+    // Превращаем объект Firebase в массив, добавляя id из ключа
+    const all = Object.entries(data)
+      .map(([id, g]) => ({ id, ...g }))
+      .sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+
+    guests  = all.filter(g => !g.deleted_at);
+    deleted = all.filter(g =>  g.deleted_at)
+                 .sort((a, b) => b.deleted_at - a.deleted_at);
+
+    renderAll();
+    document.getElementById('status-text').textContent = 'Обновляется в реальном времени';
+  }, () => {
+    document.getElementById('status-text').textContent = 'Ошибка подключения';
+  });
+}
+
+/* ==============================================================
+   ДОБАВЛЕНИЕ ГОСТЯ
+============================================================== */
+async function addGuest() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) {
+    showFormErr('Введите имя гостя');
+    document.getElementById('f-name').classList.add('err');
+    return;
+  }
+
+  const btn = document.getElementById('add-btn');
+  btn.disabled = true; btn.textContent = 'Сохраняю...';
+
+  const { error } = await guestsRef.push({
+    name,
+    contact:    val('f-contact') || null,
+    invited_by: val('f-resp')    || null,
+    status:     val('f-status'),
+    category:   val('f-category') || null,
+    amount:     parseInt(val('f-amount')) || 0,
+    notes:      val('f-notes')   || null,
+    created_at: Date.now(),
+    deleted_at: null,
+  }).then(() => ({})).catch(e => ({ error: e }));
+
+  btn.disabled = false; btn.textContent = 'Добавить';
+  if (error) { showFormErr('Ошибка сохранения, попробуй ещё раз'); return; }
+
+  ['f-name','f-contact','f-amount','f-notes','f-resp'].forEach(id => el(id).value = '');
+  el('f-status').value = 'potential';
+  el('f-category').value = '';
+  el('f-name').classList.remove('err');
+  hideFormErr();
+  el('form-card').style.display = 'none';
+}
+
+/* ==============================================================
+   СМЕНА СТАТУСА В ТАБЛИЦЕ
+============================================================== */
+async function changeStatus(id, status) {
+  await guestsRef.child(id).update({ status });
+}
+
+/* ==============================================================
+   РЕДАКТИРОВАНИЕ СТРОКИ
+   Клик по ✏ → ячейки становятся инпутами
+============================================================== */
+function startEdit(id) {
+  editingId = id;
+  renderTable(); // перерисовываем — строка отрисуется в режиме редактирования
+}
+
+function cancelEdit() {
+  editingId = null;
+  renderTable();
+}
+
+async function saveEdit(id) {
+  const g = {
+    name:       el(`e-name-${id}`).value.trim(),
+    contact:    el(`e-contact-${id}`).value.trim() || null,
+    invited_by: el(`e-resp-${id}`).value.trim()    || null,
+    status:     el(`e-status-${id}`).value,
+    category:   el(`e-cat-${id}`).value            || null,
+    amount:     parseInt(el(`e-amount-${id}`).value) || 0,
+    notes:      el(`e-notes-${id}`).value.trim()   || null,
+  };
+  if (!g.name) { showToast('Имя не может быть пустым'); return; }
+
+  await guestsRef.child(id).update(g);
+  editingId = null;
+  showToast('Сохранено');
+}
+
+/* ==============================================================
+   МЯГКОЕ УДАЛЕНИЕ — запись идёт в корзину, не исчезает навсегда
+============================================================== */
+async function softDelete(id, name) {
+  await guestsRef.child(id).update({ deleted_at: Date.now() });
+  showToast(`«${name}» перемещён в корзину`);
+}
+
+/* ==============================================================
+   КОРЗИНА — восстановление и очистка
+============================================================== */
+async function restore(id) {
+  await guestsRef.child(id).update({ deleted_at: null });
+  showToast('Запись восстановлена');
+}
+
+async function permDelete(id, name) {
+  if (!confirm(`Удалить «${name}» навсегда? Это нельзя отменить.`)) return;
+  await guestsRef.child(id).remove();
+  showToast('Удалено навсегда');
+}
+
+async function emptyTrash() {
+  if (deleted.length === 0) return;
+  if (!confirm(`Удалить навсегда все ${deleted.length} записей из корзины?`)) return;
+  // Удаляем все одним запросом
+  const updates = {};
+  deleted.forEach(g => { updates[g.id] = null; });
+  await guestsRef.update(updates);
+  showToast('Корзина очищена');
+}
+
+function openTrash() {
+  renderTrash();
+  el('trash-modal').classList.add('open');
+}
+function closeTrash() { el('trash-modal').classList.remove('open'); }
+
+/* ==============================================================
+   ОТРИСОВКА ТАБЛИЦЫ
+============================================================== */
+function renderTable() {
+  const q = el('search').value.toLowerCase();
+  const tbody = el('tbody');
+
+  const filtered = guests.filter(g => {
+    const mf = activeFilter === 'all' || g.status === activeFilter;
+    const ms = !q
+      || g.name.toLowerCase().includes(q)
+      || (g.invited_by || '').toLowerCase().includes(q)
+      || (g.notes      || '').toLowerCase().includes(q);
+    return mf && ms;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">
+      <div class="big">✦</div>
+      <p>${q || activeFilter !== 'all' ? 'Никого не найдено' : 'Список пуст — добавьте первого гостя'}</p>
+    </td></tr>`;
+    el('table-footer').style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(g => {
+    // Строка в режиме редактирования
+    if (g.id === editingId) return editRow(g);
+
+    const ini = g.name.trim().split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase()||'').join('');
+    const st  = STATUSES[g.status]  || STATUSES.potential;
+    const cat = g.category ? CATEGORIES[g.category] : null;
+    const amt = g.amount   ? Number(g.amount).toLocaleString('ru-RU') + ' ₽' : '';
+    const opts = Object.entries(STATUSES).map(([v,s]) =>
+      `<option value="${v}" ${v===g.status?'selected':''}>${s.l}</option>`).join('');
+
+    return `<tr>
+      <td><div class="name-cell">
+        <div class="avatar">${ini}</div>
+        <span style="font-weight:500">${esc(g.name)}</span>
+      </div></td>
+      <td>
+        <select class="inline-sel badge ${st.cls}" onchange="changeStatus('${g.id}',this.value)">${opts}</select>
+      </td>
+      <td class="hide-mob">
+        ${cat ? `<span class="badge ${cat.cls}">${cat.l}</span>` : '<span class="muted-val">—</span>'}
+      </td>
+      <td class="hide-mob">
+        ${amt ? `<span class="amount-val">${amt}</span>` : '<span class="muted-val">—</span>'}
+      </td>
+      <td class="hide-mob"><span class="${g.invited_by?'':'muted-val'}">${esc(g.invited_by||'—')}</span></td>
+      <td class="hide-mob"><span class="${g.contact?'':'muted-val'}">${esc(g.contact||'—')}</span></td>
+      <td class="hide-mob" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <span class="${g.notes?'':'muted-val'}" title="${esc(g.notes||'')}">${esc(g.notes||'—')}</span>
+      </td>
+      <td>
+        <div style="display:flex;gap:2px">
+          <button class="btn-icon" onclick="startEdit('${g.id}')" title="Редактировать">✏</button>
+          <button class="btn-icon del" onclick="softDelete('${g.id}','${esc(g.name)}')" title="В корзину">×</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const sum = filtered.reduce((s,g) => s+(Number(g.amount)||0), 0);
+  el('footer-count').textContent = `Показано: ${filtered.length} из ${guests.length}`;
+  el('footer-sum').textContent   = sum ? `Итого: ${sum.toLocaleString('ru-RU')} ₽` : '';
+  el('table-footer').style.display = 'flex';
+}
+
+/* Строка в режиме редактирования — все поля становятся инпутами */
+function editRow(g) {
+  const catOpts = `<option value="">—</option>` + Object.entries(CATEGORIES).map(([v,c]) =>
+    `<option value="${v}" ${v===g.category?'selected':''}>${c.l}</option>`).join('');
+  const stOpts  = Object.entries(STATUSES).map(([v,s]) =>
+    `<option value="${v}" ${v===g.status?'selected':''}>${s.l}</option>`).join('');
+
+  return `<tr class="editing">
+    <td><input class="edit-input" id="e-name-${g.id}" value="${esc(g.name)}" placeholder="Имя" /></td>
+    <td><select class="edit-input inline-sel" id="e-status-${g.id}">${stOpts}</select></td>
+    <td class="hide-mob"><select class="edit-input inline-sel" id="e-cat-${g.id}">${catOpts}</select></td>
+    <td class="hide-mob"><input class="edit-input" id="e-amount-${g.id}" type="number" value="${g.amount||0}" min="0" step="1000" /></td>
+    <td class="hide-mob">
+      <input class="edit-input" id="e-resp-${g.id}" list="resp-opts" value="${esc(g.invited_by||'')}" placeholder="БХ, ШМ, БГ..." />
+    </td>
+    <td class="hide-mob"><input class="edit-input" id="e-contact-${g.id}" value="${esc(g.contact||'')}" placeholder="Контакт" /></td>
+    <td class="hide-mob"><input class="edit-input" id="e-notes-${g.id}" value="${esc(g.notes||'')}" placeholder="Заметки" /></td>
+    <td>
+      <div class="edit-actions">
+        <button class="btn btn-primary btn-sm" onclick="saveEdit('${g.id}')">✓</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelEdit()">✕</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+/* ==============================================================
+   КОРЗИНА — отрисовка
+============================================================== */
+function renderTrash() {
+  const body = el('trash-body');
+  const btn  = el('empty-trash-btn');
+
+  // Счётчик в шапке
+  const cnt = deleted.length;
+  el('trash-count').textContent = cnt ? `(${cnt})` : '';
+  btn.style.display = cnt ? 'inline-flex' : 'none';
+
+  if (cnt === 0) {
+    body.innerHTML = '<div class="trash-empty">Корзина пуста</div>';
+    return;
+  }
+
+  body.innerHTML = deleted.map(g => {
+    const d = new Date(g.deleted_at).toLocaleDateString('ru-RU', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    return `<div class="trash-row">
+      <div>
+        <div class="trash-name">${esc(g.name)}</div>
+        <div class="trash-meta">Удалён: ${d} · ${STATUSES[g.status]?.l||''}</div>
+      </div>
+      <div class="trash-actions">
+        <button class="btn btn-outline btn-sm btn-icon restore" onclick="restore('${g.id}')" title="Восстановить">↩ Восстановить</button>
+        <button class="btn btn-danger btn-sm" onclick="permDelete('${g.id}','${esc(g.name)}')" title="Удалить навсегда">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ==============================================================
+   СТАТИСТИКА
+============================================================== */
+function renderStats() {
+  const confirmed = guests.filter(g => g.status==='confirmed');
+  const promised  = guests.filter(g => g.status==='promised');
+  const allAmt    = guests.reduce((s,g) => s+(Number(g.amount)||0), 0);
+  const confAmt   = confirmed.reduce((s,g) => s+(Number(g.amount)||0), 0);
+
+  el('s-total').textContent     = guests.length;
+  el('s-conf-cnt').textContent  = `подтверждено: ${confirmed.length}`;
+  el('s-total-amt').textContent = allAmt  ? allAmt.toLocaleString('ru-RU')+' ₽' : '—';
+  el('s-conf-amt').textContent  = confAmt ? confAmt.toLocaleString('ru-RU')+' ₽' : '—';
+  el('s-promised').textContent  = promised.length;
+}
+
+function renderAll() {
+  renderStats();
+  renderTable();
+  renderTrash();
+}
+
+/* ==============================================================
+   ЭКСПОРТ
+============================================================== */
+function exportCSV() {
+  const headers = ['Имя','Контакт','Принадлежность','Ответственный','Статус','Сумма взноса','Заметки'];
+  const rows = guests.map(g => [
+    g.name,
+    g.contact    || '',
+    g.category   ? (CATEGORIES[g.category]?.l || g.category) : '',
+    g.invited_by || '',
+    STATUSES[g.status]?.l || g.status,
+    g.amount || 0,
+    g.notes  || '',
+  ]);
+  const csv = [headers,...rows]
+    .map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(','))
+    .join('\n');
+  download('\uFEFF'+csv, 'гости_ужин.csv', 'text/csv;charset=utf-8;');
+}
+
+// JSON — полный бэкап всех данных, включая корзину
+function exportJSON() {
+  const data = { exported: new Date().toISOString(), active: guests, deleted };
+  download(JSON.stringify(data, null, 2), 'backup_гости.json', 'application/json');
+}
+
+function download(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ==============================================================
+   ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+============================================================== */
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+function toggleForm() {
+  const open = el('form-card').style.display === 'none';
+  el('form-card').style.display = open ? 'block' : 'none';
+  if (open) el('f-name').focus();
+}
+function showFormErr(msg) { const e=el('form-err'); e.textContent=msg; e.style.display='block'; }
+function hideFormErr()     { el('form-err').style.display='none'; }
+function showToast(msg) {
+  const t = el('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+function el(id)  { return document.getElementById(id); }
+function val(id) { return el(id)?.value || ''; }
+function esc(s)  {
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Закрытие корзины по клику на фон
+el('trash-modal').addEventListener('click', e => {
+  if (e.target === el('trash-modal')) closeTrash();
+});
+
+// Enter в форме
+document.addEventListener('keydown', e => {
+  if (e.key==='Enter' && el('form-card').style.display!=='none') {
+    if (document.activeElement.tagName==='INPUT') addGuest();
+  }
+});
+
+init();
+</script>
+
+</body>
+</html>
