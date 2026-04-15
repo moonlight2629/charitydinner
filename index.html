@@ -17,6 +17,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
+  <!-- SheetJS — экспорт в Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
   <style>
     /* ============================================================
        ЦВЕТА — всё управление в одном месте
@@ -440,7 +443,7 @@
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-outline btn-sm" onclick="openTrash()">🗑 Корзина <span id="trash-count"></span></button>
     <button class="btn btn-outline btn-sm" onclick="exportJSON()">↓ JSON</button>
-    <button class="btn btn-outline btn-sm" onclick="exportCSV()">↓ CSV</button>
+    <button class="btn btn-outline btn-sm" onclick="exportXLSX()">↓ Excel</button>
     <button class="btn btn-primary btn-sm" onclick="toggleForm()">+ Добавить</button>
   </div>
 </header>
@@ -960,7 +963,7 @@ function renderAll() {
 /* ==============================================================
    ЭКСПОРТ
 ============================================================== */
-function exportCSV() {
+function exportXLSX() {
   const headers = ['Имя','Контакт','Принадлежность','Ответственный','Статус','Сумма взноса','Заметки'];
   const rows = guests.map(g => [
     g.name,
@@ -971,15 +974,11 @@ function exportCSV() {
     g.amount || 0,
     g.notes  || '',
   ]);
-  const csv = [headers,...rows]
-    .map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join('\t'))
-    .join('\n');
-  const bom = '\uFEFF';
-  const blob = new Blob([bom + csv], { type: 'text/plain;charset=utf-16le;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'гости_ужин.csv'; a.click();
-  URL.revokeObjectURL(url);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:28},{wch:20},{wch:22},{wch:14},{wch:16},{wch:14},{wch:32}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Гости');
+  XLSX.writeFile(wb, 'гости_ужин.xlsx');
 }
 
 // JSON — полный бэкап всех данных, включая корзину
