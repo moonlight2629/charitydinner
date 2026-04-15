@@ -391,14 +391,38 @@
     }
     #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
+    /* Подсветка дублей */
+    .dup-row td { background: #FFFBEA !important; }
+    .dup-row td:first-child { border-left: 3px solid #E8C547; }
+    .dup-badge {
+      font-size:.68rem; background:#FEF3C7; color:#92400E;
+      border:1px solid #FCD34D; padding:1px 7px; border-radius:20px;
+      white-space:nowrap;
+    }
+    .dup-warn {
+      font-size:.8rem; color:#92400E; background:#FFFBEA;
+      border:1px solid #FCD34D; border-radius:7px;
+      padding:7px 12px; margin-bottom:8px;
+    }
+
     /* ============================================================
-       АДАПТИВ
+       АДАПТИВ — мобильная версия
     ============================================================ */
     @media (max-width:680px) {
       header { padding:16px 14px; }
       main { padding:16px 12px 0; }
       .fg-3, .fg-3b { grid-template-columns:1fr; }
       .hide-mob { display:none !important; }
+
+      /* На мобильном показываем имя + статус + доп.инфо в одной ячейке */
+      .mob-stack { display:flex; flex-direction:column; gap:5px; }
+      .mob-meta  {
+        display:flex; flex-wrap:wrap; gap:4px; align-items:center;
+      }
+      .mob-line  { font-size:.75rem; color:var(--muted); }
+    }
+    @media (min-width:681px) {
+      .mob-stack .mob-meta { display:none; }
     }
   </style>
 </head>
@@ -454,7 +478,8 @@
     <div class="fg fg-3">
       <div class="form-group">
         <label for="f-name">Имя / Фамилия *</label>
-        <input id="f-name" type="text" placeholder="Иванов Иван" autocomplete="off" />
+        <input id="f-name" type="text" placeholder="Иванов Иван" autocomplete="off"
+               oninput="checkDupLive()" />
       </div>
       <div class="form-group">
         <label for="f-category">Принадлежность</label>
@@ -507,6 +532,7 @@
       </div>
     </div>
 
+    <div class="dup-warn" id="dup-warn-form" style="display:none"></div>
     <div class="form-err" id="form-err" style="display:none"></div>
     <div class="form-actions">
       <button class="btn btn-primary" onclick="addGuest()" id="add-btn">Добавить</button>
@@ -584,9 +610,9 @@
 const firebaseConfig = {
   apiKey:            'AIzaSyA2hxEP8p3RGqECDvNeU_eWhzbSFu9N5KU',
   authDomain:        'charity-dinner.firebaseapp.com',
-  databaseURL:       'https://charity-dinner-default-rtdb.europe-west1.firebasedatabase.app',   // важно! начинается с https://
+  databaseURL:       'https://charity-dinner-default-rtdb.europe-west1.firebasedatabase.app',
   projectId:         'charity-dinner',
-  storageBucket:     'harity-dinner.firebasestorage.app',
+  storageBucket:     'charity-dinner.firebasestorage.app',
   messagingSenderId: '178326249628',
   appId:             '1:178326249628:web:bbf9b55c16e577cf700d59',
 };
@@ -781,22 +807,47 @@ function renderTable() {
     return;
   }
 
+  // Находим дубли — группируем по словам имени (>2 символов)
+  // Если два гостя делят хотя бы одно значимое слово — оба считаются дублями
+  const dupIds = new Set();
+  for (let i = 0; i < guests.length; i++) {
+    for (let j = i + 1; j < guests.length; j++) {
+      if (isDuplicate(guests[i].name, guests[j].name)) {
+        dupIds.add(guests[i].id);
+        dupIds.add(guests[j].id);
+      }
+    }
+  }
+
   tbody.innerHTML = filtered.map(g => {
-    // Строка в режиме редактирования
     if (g.id === editingId) return editRow(g);
 
-    const ini = g.name.trim().split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase()||'').join('');
-    const st  = STATUSES[g.status]  || STATUSES.potential;
-    const cat = g.category ? CATEGORIES[g.category] : null;
-    const amt = g.amount   ? Number(g.amount).toLocaleString('ru-RU') + ' ₽' : '';
+    const ini  = g.name.trim().split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase()||'').join('');
+    const st   = STATUSES[g.status]  || STATUSES.potential;
+    const cat  = g.category ? CATEGORIES[g.category] : null;
+    const amt  = g.amount   ? Number(g.amount).toLocaleString('ru-RU') + ' ₽' : '';
+    const isDup = dupIds.has(g.id);
     const opts = Object.entries(STATUSES).map(([v,s]) =>
       `<option value="${v}" ${v===g.status?'selected':''}>${s.l}</option>`).join('');
 
-    return `<tr>
-      <td><div class="name-cell">
-        <div class="avatar">${ini}</div>
-        <span style="font-weight:500">${esc(g.name)}</span>
-      </div></td>
+    return `<tr class="${isDup ? 'dup-row' : ''}">
+      <td>
+        <div class="name-cell">
+          <div class="avatar">${ini}</div>
+          <div class="mob-stack">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-weight:500">${esc(g.name)}</span>
+              ${isDup ? '<span class="dup-badge">похожее имя</span>' : ''}
+            </div>
+            <div class="mob-meta">
+              <span class="badge ${st.cls}" style="font-size:.68rem">${st.l}</span>
+              ${cat ? `<span class="badge ${cat.cls}" style="font-size:.68rem">${cat.l}</span>` : ''}
+              ${amt ? `<span class="mob-line">${amt}</span>` : ''}
+              ${g.invited_by ? `<span class="mob-line">${esc(g.invited_by)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </td>
       <td>
         <select class="inline-sel badge ${st.cls}" onchange="changeStatus('${g.id}',this.value)">${opts}</select>
       </td>
@@ -920,10 +971,12 @@ function exportCSV() {
     g.amount || 0,
     g.notes  || '',
   ]);
+  // sep=; подсказывает Excel использовать точку с запятой — иначе всё в одну ячейку
+  const sep = 'sep=;\n';
   const csv = [headers,...rows]
-    .map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(','))
+    .map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';'))
     .join('\n');
-  download('\uFEFF'+csv, 'гости_ужин.csv', 'text/csv;charset=utf-8;');
+  download('\uFEFF' + sep + csv, 'гости_ужин.csv', 'text/csv;charset=utf-8;');
 }
 
 // JSON — полный бэкап всех данных, включая корзину
@@ -967,6 +1020,28 @@ function esc(s)  {
   return String(s||'')
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Проверка дублей — два имени считаются похожими если
+// делят хотя бы одно слово длиннее 2 символов
+function isDuplicate(a, b) {
+  if (!a || !b) return false;
+  const words = s => s.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  return words(a).some(w => words(b).includes(w));
+}
+
+// Живая проверка при вводе имени в форму
+function checkDupLive() {
+  const name = val('f-name').trim();
+  const warn = el('dup-warn-form');
+  if (!name || name.length < 3) { warn.style.display = 'none'; return; }
+  const matches = guests.filter(g => isDuplicate(g.name, name));
+  if (matches.length > 0) {
+    warn.textContent = `⚠ Похожее имя уже есть: ${matches.map(g => g.name).join(', ')}`;
+    warn.style.display = 'block';
+  } else {
+    warn.style.display = 'none';
+  }
 }
 
 // Закрытие корзины по клику на фон
