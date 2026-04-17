@@ -550,12 +550,63 @@
       <span class="search-icon">⌕</span>
       <input type="text" id="search" placeholder="Поиск..." oninput="renderTable()" />
     </div>
-    <div class="ftabs">
-      <button class="ftab active" onclick="setFilter('all',this)">Все</button>
-      <button class="ftab" onclick="setFilter('potential',this)">Потенциальные</button>
-      <button class="ftab" onclick="setFilter('promised',this)">Обещаны</button>
-      <button class="ftab" onclick="setFilter('confirmed',this)">Подтверждены</button>
-      <button class="ftab" onclick="setFilter('declined',this)">Отказались</button>
+    <button class="btn btn-outline btn-sm" onclick="toggleFilters()" id="filter-toggle-btn">
+      Фильтры <span id="filter-badge" style="display:none;background:var(--accent);color:#fff;border-radius:20px;padding:1px 7px;font-size:.7rem;margin-left:4px"></span>
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="resetFilters()" id="reset-filters-btn" style="display:none;color:var(--red);border-color:var(--red-soft)">✕ Сбросить</button>
+  </div>
+
+  <!-- ПАНЕЛЬ ФИЛЬТРОВ -->
+  <div id="filter-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;box-shadow:var(--shadow)">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+      <div>
+        <div style="font-size:.68rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px">Статус</div>
+        <select id="fl-status" onchange="renderTable()" style="width:100%">
+          <option value="">Все статусы</option>
+          <option value="potential">Потенциальный</option>
+          <option value="promised">Обещан</option>
+          <option value="confirmed">Подтверждён</option>
+          <option value="declined">Отказался</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:.68rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px">Принадлежность</div>
+        <select id="fl-category" onchange="renderTable()" style="width:100%">
+          <option value="">Все</option>
+          <option value="graduate">Выпускник</option>
+          <option value="parent">Родитель</option>
+          <option value="par-grad">Родитель выпускника</option>
+          <option value="friend">Друг лицея</option>
+          <option value="cold">Холодный контакт</option>
+          <option value="other">Другое</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:.68rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px">Ответственный</div>
+        <select id="fl-resp" onchange="renderTable()" style="width:100%">
+          <option value="">Все</option>
+          <option value="БХ">БХ</option>
+          <option value="ШМ">ШМ</option>
+          <option value="БГ">БГ</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:.68rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px">Взнос</div>
+        <select id="fl-amount" onchange="renderTable()" style="width:100%">
+          <option value="">Любая сумма</option>
+          <option value="0">Не указан</option>
+          <option value="1-50000">До 50 000 ₽</option>
+          <option value="50000-150000">50 000 — 150 000 ₽</option>
+          <option value="150000+">От 150 000 ₽</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:.68rem;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px">Дубли</div>
+        <select id="fl-dup" onchange="renderTable()" style="width:100%">
+          <option value="">Все записи</option>
+          <option value="dup">Только дубли</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -626,7 +677,7 @@ const guestsRef = db.ref('guests'); // все данные хранятся по
 
 let guests     = [];
 let deleted    = [];
-let activeFilter = 'all';
+
 let editingId    = null;
 
 /* ==============================================================
@@ -789,29 +840,9 @@ function closeTrash() { el('trash-modal').classList.remove('open'); }
    ОТРИСОВКА ТАБЛИЦЫ
 ============================================================== */
 function renderTable() {
-  const q = el('search').value.toLowerCase();
   const tbody = el('tbody');
 
-  const filtered = guests.filter(g => {
-    const mf = activeFilter === 'all' || g.status === activeFilter;
-    const ms = !q
-      || g.name.toLowerCase().includes(q)
-      || (g.invited_by || '').toLowerCase().includes(q)
-      || (g.notes      || '').toLowerCase().includes(q);
-    return mf && ms;
-  });
-
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">
-      <div class="big">✦</div>
-      <p>${q || activeFilter !== 'all' ? 'Никого не найдено' : 'Список пуст — добавьте первого гостя'}</p>
-    </td></tr>`;
-    el('table-footer').style.display = 'none';
-    return;
-  }
-
-  // Находим дубли — группируем по словам имени (>2 символов)
-  // Если два гостя делят хотя бы одно значимое слово — оба считаются дублями
+  // Дубли вычисляем заранее — нужны и для фильтра и для подсветки
   const dupIds = new Set();
   for (let i = 0; i < guests.length; i++) {
     for (let j = i + 1; j < guests.length; j++) {
@@ -820,6 +851,55 @@ function renderTable() {
         dupIds.add(guests[j].id);
       }
     }
+  }
+
+  const q    = el('search').value.toLowerCase();
+  const fSt  = val('fl-status');
+  const fCat = val('fl-category');
+  const fRsp = val('fl-resp');
+  const fAmt = val('fl-amount');
+  const fDup = val('fl-dup');
+
+  const filtered = guests.filter(g => {
+    if (q && !(
+      g.name.toLowerCase().includes(q) ||
+      (g.invited_by||'').toLowerCase().includes(q) ||
+      (g.notes||'').toLowerCase().includes(q) ||
+      (g.contact||'').toLowerCase().includes(q)
+    )) return false;
+    if (fSt  && g.status !== fSt) return false;
+    if (fCat && g.category !== fCat) return false;
+    if (fRsp && (g.invited_by||'') !== fRsp) return false;
+    if (fAmt) {
+      const amt = Number(g.amount) || 0;
+      if (fAmt === '0'            && amt !== 0)                    return false;
+      if (fAmt === '1-50000'      && (amt < 1 || amt > 50000))     return false;
+      if (fAmt === '50000-150000' && (amt < 50000 || amt > 150000)) return false;
+      if (fAmt === '150000+'      && amt < 150000)                  return false;
+    }
+    if (fDup === 'dup' && !dupIds.has(g.id)) return false;
+    return true;
+  });
+
+  // Обновляем счётчик активных фильтров на кнопке
+  const activeCount = [fSt, fCat, fRsp, fAmt, fDup, q].filter(Boolean).length;
+  const badge = el('filter-badge');
+  if (activeCount > 0) {
+    badge.textContent = activeCount;
+    badge.style.display = 'inline';
+    el('reset-filters-btn').style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+    el('reset-filters-btn').style.display = 'none';
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">
+      <div class="big">✦</div>
+      <p>${activeCount > 0 ? 'Никого не найдено — попробуй изменить фильтры' : 'Список пуст — добавьте первого гостя'}</p>
+    </td></tr>`;
+    el('table-footer').style.display = 'none';
+    return;
   }
 
   tbody.innerHTML = filtered.map(g => {
@@ -998,10 +1078,15 @@ function download(content, filename, type) {
 /* ==============================================================
    ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 ============================================================== */
-function setFilter(f, btn) {
-  activeFilter = f;
-  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+function toggleFilters() {
+  const panel = el('filter-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+function resetFilters() {
+  ['fl-status','fl-category','fl-resp','fl-amount','fl-dup'].forEach(id => {
+    if (el(id)) el(id).value = '';
+  });
+  el('search').value = '';
   renderTable();
 }
 function toggleForm() {
