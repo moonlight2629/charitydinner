@@ -1111,10 +1111,28 @@ function esc(s)  {
 
 // Проверка дублей — два имени считаются похожими если
 // делят хотя бы одно слово длиннее 2 символов
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i||j));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+function fuzzyMatch(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return false;
+  return levenshtein(a, b) <= 2;
+}
 function isDuplicate(a, b) {
   if (!a || !b) return false;
   const words = s => s.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  return words(a).some(w => words(b).includes(w));
+  const wa = words(a), wb = words(b);
+  let matches = 0;
+  for (const wa_ of wa)
+    if (wb.some(wb_ => fuzzyMatch(wa_, wb_))) matches++;
+  return matches >= 2;
 }
 
 // Живая проверка при вводе имени в форму
